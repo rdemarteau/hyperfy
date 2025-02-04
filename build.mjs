@@ -69,7 +69,7 @@ const clientHtmlDest = path.join(rootDir, 'build/public/index.html')
     await clientCtx.watch()
   } else {
     await clientCtx.rebuild()
-  }
+  }  
 }
 
 /**
@@ -93,27 +93,25 @@ let spawn
       'process.env.CLIENT': 'false',
       'process.env.SERVER': 'true',
     },
-    plugins: [
-      {
-        name: 'server-finalize-plugin',
-        setup(build) {
-          build.onEnd(async result => {
-            // copy over physx wasm
-            const physxWasmSrc = path.join(rootDir, 'src/server/physx/physx-js-webidl.wasm')
-            const physxWasmDest = path.join(rootDir, 'build/physx-js-webidl.wasm')
-            await fs.copy(physxWasmSrc, physxWasmDest)
-            // start the server or stop here
-            if (dev) {
-              // (re)start server
-              spawn?.kill('SIGTERM')
-              spawn = fork(path.join(rootDir, 'build/index.js'))
-            } else {
-              process.exit(1)
-            }
-          })
-        },
-      },
-    ],
+plugins: [
+  {
+    name: 'server-finalize-plugin',
+    setup(build) {
+      build.onEnd(async result => {
+        // copy over physx wasm
+        const physxWasmSrc = path.join(rootDir, 'src/server/physx/physx-js-webidl.wasm')
+        const physxWasmDest = path.join(rootDir, 'build/physx-js-webidl.wasm')
+        await fs.copy(physxWasmSrc, physxWasmDest)
+        // only handle dev mode server
+        if (dev) {
+          spawn?.kill('SIGTERM')
+          spawn = fork(path.join(rootDir, 'build/index.js'))
+        }
+        // Don't exit in production, just complete the build
+      })
+    },
+  },
+],
     loader: {},
   })
   if (dev) {
