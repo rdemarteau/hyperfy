@@ -46,11 +46,27 @@ const clientHtmlDest = path.join(rootDir, 'build/public/index.html')
     },
     loader: {
       '.js': 'jsx',
+      '.physx.js': 'js', // Treat PhysX script differently
     },
-    alias: {
-      react: 'react', // always use our own local react (jsx)
+    resolve: {
+      alias: {
+        'physx-js-webidl': path.join(rootDir, 'src/server/physx/physx-js-webidl.js')
+      }
     },
     plugins: [
+      {
+        name: 'physx-plugin',
+        setup(build) {
+          // Ensure PhysX script is treated as a module
+          build.onLoad({ filter: /physx-js-webidl\.js$/ }, async (args) => {
+            const contents = await fs.readFile(args.path, 'utf8');
+            return {
+              contents: contents.replace('import.meta.url', 'URL.createObjectURL(new Blob([]))'),
+              loader: 'js',
+            };
+          });
+        }
+      },
       {
         name: 'client-finalize-plugin',
         setup(build) {
