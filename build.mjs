@@ -15,7 +15,6 @@ await fs.emptyDir(buildDir)
 /**
  * Build Client
  */
-
 const clientPublicDir = path.join(rootDir, 'src/client/public')
 const clientBuildDir = path.join(rootDir, 'build/public')
 const clientHtmlSrc = path.join(rootDir, 'src/client/public/index.html')
@@ -36,7 +35,14 @@ const clientHtmlDest = path.join(rootDir, 'build/public/index.html')
     jsx: 'automatic',
     jsxImportSource: '@firebolt-dev/jsx',
     define: {
-      // 'process.env.NODE_ENV': '"development"',
+      'process.env.NODE_ENV': JSON.stringify(dev ? 'development' : 'production'),
+      'process.env.CLIENT': 'true',
+      'process.env.SERVER': 'false',
+      'process': JSON.stringify({
+        env: {
+          NODE_ENV: dev ? 'development' : 'production'
+        }
+      })
     },
     loader: {
       '.js': 'jsx',
@@ -49,13 +55,28 @@ const clientHtmlDest = path.join(rootDir, 'build/public/index.html')
         name: 'client-finalize-plugin',
         setup(build) {
           build.onEnd(async result => {
-            // copy over public files
+            // Copy over public files
             await fs.copy(clientPublicDir, clientBuildDir)
-            // find js output file
+
+            // Explicitly copy env.js and physx files
+            const envJsSrc = path.join(clientPublicDir, 'env.js')
+            const envJsDest = path.join(buildDir, 'env.js')
+            const physxJsSrc = path.join(rootDir, 'src/server/physx/physx-js-webidl.js')
+            const physxJsDest = path.join(buildDir, 'physx-js-webidl.js')
+
+            if (await fs.pathExists(envJsSrc)) {
+              await fs.copy(envJsSrc, envJsDest)
+            }
+            if (await fs.pathExists(physxJsSrc)) {
+              await fs.copy(physxJsSrc, physxJsDest)
+            }
+
+            // Find js output file
             const metafile = result.metafile
             const outputFiles = Object.keys(metafile.outputs)
             const jsFile = outputFiles.find(file => file.endsWith('.js')).split('build/public')[1]
-            // inject into html and copy over
+
+            // Inject into html and copy over
             let htmlContent = await fs.readFile(clientHtmlSrc, 'utf-8')
             htmlContent = htmlContent.replace('{jsFile}', jsFile)
             htmlContent = htmlContent.replaceAll('{buildId}', Date.now())
@@ -65,6 +86,7 @@ const clientHtmlDest = path.join(rootDir, 'build/public/index.html')
       },
     ],
   })
+
   if (dev) {
     await clientCtx.watch()
   } else {
@@ -75,9 +97,7 @@ const clientHtmlDest = path.join(rootDir, 'build/public/index.html')
 /**
  * Build Server
  */
-
 let spawn
-
 {
   const serverCtx = await esbuild.context({
     entryPoints: ['src/server/index.js'],
@@ -90,30 +110,39 @@ let spawn
     sourcemap: true,
     packages: 'external',
     define: {
+      'process.env.NODE_ENV': JSON.stringify(dev ? 'development' : 'production'),
       'process.env.CLIENT': 'false',
       'process.env.SERVER': 'true',
-    },
-plugins: [
-  {
-    name: 'server-finalize-plugin',
-    setup(build) {
-      build.onEnd(async result => {
-        // copy over physx wasm
-        const physxWasmSrc = path.join(rootDir, 'src/server/physx/physx-js-webidl.wasm')
-        const physxWasmDest = path.join(rootDir, 'build/physx-js-webidl.wasm')
-        await fs.copy(physxWasmSrc, physxWasmDest)
-        // only handle dev mode server
-        if (dev) {
-          spawn?.kill('SIGTERM')
-          spawn = fork(path.join(rootDir, 'build/index.js'))
+      'process': JSON.stringify({
+        env: {
+          NODE_ENV: dev ? 'development' : 'production'
         }
-        process.exit(0)
       })
     },
-  },
-],
+    plugins: [
+      {
+        name: 'server-finalize-plugin',
+        setup(build) {
+          build.onEnd(async result => {
+            // Copy over physx wasm
+            const physxWasmSrc = path.join(rootDir, 'src/server/physx/physx-js-webidl.wasm')
+            const physxWasmDest = path.join(rootDir, 'build/physx-js-webidl.wasm')
+            await fs.copy(physxWasmSrc, physxWasmDest)
+
+            // Only handle dev mode server
+            if (dev) {
+              spawn?.kill('SIGTERM')
+              spawn = fork(path.join(rootDir, 'build/index.js'))
+            } else {
+              process.exit(0)
+            }
+          })
+        },
+      },
+    ],
     loader: {},
   })
+
   if (dev) {
     await serverCtx.watch()
   } else {
