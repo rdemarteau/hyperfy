@@ -107,7 +107,7 @@ plugins: [
           spawn?.kill('SIGTERM')
           spawn = fork(path.join(rootDir, 'build/index.js'))
         }
-        // Don't exit in production, just complete the build
+        process.exit(0)
       })
     },
   },
